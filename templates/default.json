@@ -1,0 +1,12 @@
+{
+  "width": 1800,
+  "height": 1200,
+  "dpi": 300,
+  "background": "templates/default-bg.png",
+  "slots": [
+    { "x": 50, "y": 50, "width": 825, "height": 550 },
+    { "x": 925, "y": 50, "width": 825, "height": 550 },
+    { "x": 50, "y": 650, "width": 825, "height": 550 },
+    { "x": 925, "y": 650, "width": 825, "height": 550 }
+  ]
+}
