@@ -138,10 +138,10 @@ describe('detectPrinter', () => {
     )
   })
 
-  it('throws when lpstat command fails', async () => {
+  it('resolves null when lpstat command fails', async () => {
     mockExecFileError('lpstat: No destinations added.')
 
-    await expect(detectPrinter()).rejects.toThrow()
+    await expect(detectPrinter()).resolves.toBeNull()
   })
 })
 

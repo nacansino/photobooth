@@ -18,8 +18,8 @@ export async function loadTemplate(configPath: string): Promise<TemplateConfig> 
   if (typeof config.background !== 'string') {
     throw new Error('Template missing required field: background')
   }
-  if (!Array.isArray(config.slots) || config.slots.length !== 4) {
-    throw new Error('Template must have exactly 4 slots')
+  if (!Array.isArray(config.slots) || config.slots.length === 0) {
+    throw new Error('Template must have at least 1 slot')
   }
 
   for (const slot of config.slots as Record<string, unknown>[]) {
@@ -38,12 +38,12 @@ export async function loadTemplate(configPath: string): Promise<TemplateConfig> 
 
 export async function compositePhotos(
   templateConfig: TemplateConfig,
-  photoPaths: [string, string, string, string],
+  photoPaths: string[],
   outputPath: string,
 ): Promise<string> {
   const overlays: sharp.OverlayOptions[] = []
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < templateConfig.slots.length; i++) {
     const slot = templateConfig.slots[i]
     const resized = await resizeToFit(photoPaths[i], slot.width, slot.height)
     overlays.push({
@@ -53,8 +53,13 @@ export async function compositePhotos(
     })
   }
 
+  if (templateConfig.overlay) {
+    overlays.push({ input: templateConfig.overlay, left: 0, top: 0 })
+  }
+
   await sharp(templateConfig.background)
     .composite(overlays)
+    .withMetadata({ density: templateConfig.dpi })
     .jpeg({ quality: 95 })
     .toFile(outputPath)
 

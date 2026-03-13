@@ -1,15 +1,43 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import log from 'electron-log/main'
+
 import path from 'path'
+import { execFile } from 'child_process'
 import { IPC_CHANNELS } from '@shared/types'
 import { createCameraService } from './camera'
 import { detectPrinter, printImage } from './printer'
 import { compositePhotos, loadTemplate } from './compositor'
 import { createSession, saveShot, saveComposite } from './storage'
 
+// Initialize electron-log: writes to ~/.config/photobooth/logs/main.log
+log.initialize()
+log.transports.file.maxSize = 5 * 1024 * 1024 // 5 MB
+
+process.on('uncaughtException', (err) => {
+  log.error('[uncaughtException]', err)
+})
+process.on('unhandledRejection', (reason) => {
+  log.error('[unhandledRejection]', reason)
+})
+
+function releaseCamera(): Promise<void> {
+  return new Promise((resolve) => {
+    // Kill gvfs monitors that claim the camera via PTP and MTP
+    execFile('pkill', ['-f', 'gvfs-(gphoto2|mtp)-volume-monitor'], (error) => {
+      if (!error) {
+        log.info('[camera] Killed gvfs volume monitors')
+      }
+      // Note: uvcvideo is NOT unloaded — needed for HDMI capture card.
+      // The udev rule (99-canon-eos-m100.rules) prevents it from claiming the Canon.
+      resolve()
+    })
+  })
+}
+
 let mainWindow: BrowserWindow | null = null
 
 const camera = createCameraService()
-let stopPreview: (() => void) | null = null
+let stopPreview: (() => Promise<void>) | null = null
 
 // Session tracking for capture indexing
 let currentSessionDir: string | null = null
@@ -37,7 +65,7 @@ function createWindow(): void {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
-  if (isDev) {
+  if (isDev && process.env.ELECTRON_RENDERER_URL) {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   }
 
@@ -53,7 +81,7 @@ ipcMain.handle(IPC_CHANNELS.CAMERA_DETECT, async () => {
 })
 
 ipcMain.handle(IPC_CHANNELS.CAMERA_START_PREVIEW, async () => {
-  if (stopPreview) stopPreview()
+  if (stopPreview) await stopPreview()
 
   stopPreview = camera.startPreviewStream((frame) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -64,12 +92,13 @@ ipcMain.handle(IPC_CHANNELS.CAMERA_START_PREVIEW, async () => {
 
 ipcMain.handle(IPC_CHANNELS.CAMERA_STOP_PREVIEW, async () => {
   if (stopPreview) {
-    stopPreview()
+    await stopPreview()
     stopPreview = null
   }
 })
 
 ipcMain.handle(IPC_CHANNELS.CAMERA_CAPTURE, async () => {
+  // Capture happens through the same preview-stream process — no USB handoff needed
   if (!currentSessionDir) {
     const session = await createSession()
     currentSessionDir = session.sessionDir
@@ -85,17 +114,23 @@ ipcMain.handle(IPC_CHANNELS.CAMERA_CAPTURE, async () => {
   return result
 })
 
+ipcMain.handle(IPC_CHANNELS.TEMPLATE_GET, async () => {
+  const templatePath = path.join(app.isPackaged ? process.resourcesPath : process.cwd(), 'templates', 'default.json')
+  return loadTemplate(templatePath)
+})
+
 ipcMain.handle(IPC_CHANNELS.PRINTER_DETECT, async (_event, name?: string) => {
   try {
     return await detectPrinter(name)
-  } catch {
+  } catch (err) {
+    log.error('[printer] Detection failed:', err)
     return null
   }
 })
 
 ipcMain.handle(IPC_CHANNELS.PRINT_QUEUE, async (_event, _sessionId: string) => {
   if (!currentSessionDir) {
-    console.log('[print] No session directory, skipping')
+    log.warn('[print] No session directory, skipping')
     return
   }
 
@@ -109,30 +144,32 @@ ipcMain.handle(IPC_CHANNELS.PRINT_QUEUE, async (_event, _sessionId: string) => {
     const templatePath = path.join(app.isPackaged ? process.resourcesPath : process.cwd(), 'templates', 'default.json')
     const templateConfig = await loadTemplate(templatePath)
 
-    // Resolve background path relative to template location
+    // Resolve image paths relative to template location
     const templateDir = path.dirname(templatePath)
     templateConfig.background = path.join(templateDir, path.basename(templateConfig.background))
+    if (templateConfig.overlay) {
+      templateConfig.overlay = path.join(templateDir, path.basename(templateConfig.overlay))
+    }
 
-    const photoPaths = [
-      path.join(sessionDir, 'shot-0.jpg'),
-      path.join(sessionDir, 'shot-1.jpg'),
-      path.join(sessionDir, 'shot-2.jpg'),
-      path.join(sessionDir, 'shot-3.jpg'),
-    ] as [string, string, string, string]
+    const photoPaths = templateConfig.slots.map((_slot, i) =>
+      path.join(sessionDir, `shot-${i}.jpg`)
+    )
 
     const compositePath = path.join(sessionDir, 'composite.jpg')
     await compositePhotos(templateConfig, photoPaths, compositePath)
-    console.log(`[composite] Saved: ${compositePath}`)
+    log.info(`[composite] Saved: ${compositePath}`)
 
-    // Try to print — skip gracefully if no printer
-    try {
+    // Try to print — skip if disabled or no printer
+    if (templateConfig.printEnabled === false) {
+      log.info('[print] Printing disabled in template config — skipping')
+    } else try {
       const printer = await detectPrinter()
       if (printer) {
         const job = await printImage(compositePath, printer.name, {
-          media: 'Postcard.fullbleed',
+          media: '89x119mm.Borderless',
           fitToPage: true,
         })
-        console.log(`[print] Job queued: ${job.jobId}`)
+        log.info(`[print] Job queued: ${job.jobId}`)
 
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send(IPC_CHANNELS.PRINT_STATUS, {
@@ -141,13 +178,13 @@ ipcMain.handle(IPC_CHANNELS.PRINT_QUEUE, async (_event, _sessionId: string) => {
           })
         }
       } else {
-        console.log('[print] No printer found — skipping print (composite saved to disk)')
+        log.info('[print] No printer found — skipping print (composite saved to disk)')
       }
     } catch (err) {
-      console.log('[print] Printer error — skipping:', err)
+      log.error('[print] Printer error — skipping:', err)
     }
   } catch (err) {
-    console.error('[composite] Failed:', err)
+    log.error('[composite] Failed:', err)
   }
 })
 
@@ -165,7 +202,10 @@ if (!gotLock) {
     }
   })
 
-  app.whenReady().then(createWindow)
+  app.whenReady().then(async () => {
+    await releaseCamera()
+    createWindow()
+  })
 
   app.on('window-all-closed', () => {
     if (stopPreview) stopPreview()

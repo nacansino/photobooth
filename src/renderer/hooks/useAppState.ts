@@ -6,9 +6,8 @@ export const initialState: AppState = {
   shotIndex: 0,
   sessionId: null,
   photos: [],
+  totalShots: 2,
 }
-
-const TOTAL_SHOTS = 4
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -19,12 +18,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         shotIndex: 0,
         sessionId: action.sessionId,
         photos: [],
+        totalShots: action.totalShots,
       }
 
     case 'captured':
       if (state.screen !== 'capturing') return state
       const newPhotos = [...state.photos, action.photoPath]
-      if (state.shotIndex + 1 >= TOTAL_SHOTS) {
+      if (state.shotIndex + 1 >= state.totalShots) {
         return { ...state, screen: 'queued', photos: newPhotos }
       }
       return { ...state, shotIndex: state.shotIndex + 1, photos: newPhotos }

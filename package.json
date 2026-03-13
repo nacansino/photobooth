@@ -4,7 +4,7 @@
   "description": "Photo kiosk app for Canon EOS M100 + SELPHY CP1500",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev 2>&1 | grep -v 'Glib\\|G_IS_OBJECT\\|GObject\\|dbus'",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "test": "vitest run",
@@ -17,6 +17,7 @@
   "license": "ISC",
   "dependencies": {
     "electron": "^40.8.0",
+    "electron-log": "^5.4.3",
     "electron-vite": "^5.0.0",
     "nanoid": "^5.1.6",
     "react": "^19.2.4",

@@ -3,3 +3,6 @@ dist/
 test-results/
 playwright-report/
 *.tsbuildinfo
+src/main/preview-stream
+hil-test.log
+capture_preview.jpg

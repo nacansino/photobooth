@@ -13,19 +13,19 @@ describe('QueuedScreen', () => {
   })
 
   it('displays "Your photo is queued for printing" message', () => {
-    render(<QueuedScreen onSkip={vi.fn()} onTimeout={vi.fn()} />)
+    render(<QueuedScreen photos={['/tmp/1.jpg', '/tmp/2.jpg']} onSkip={vi.fn()} onTimeout={vi.fn()} />)
     expect(screen.getByText(/your photo is queued for printing/i)).toBeInTheDocument()
   })
 
   it('shows a Skip button', () => {
-    render(<QueuedScreen onSkip={vi.fn()} onTimeout={vi.fn()} />)
+    render(<QueuedScreen photos={['/tmp/1.jpg', '/tmp/2.jpg']} onSkip={vi.fn()} onTimeout={vi.fn()} />)
     const skipButton = screen.getByRole('button', { name: /skip/i })
     expect(skipButton).toBeInTheDocument()
   })
 
   it('calls onSkip when Skip is pressed', () => {
     const onSkip = vi.fn()
-    render(<QueuedScreen onSkip={onSkip} onTimeout={vi.fn()} />)
+    render(<QueuedScreen photos={['/tmp/1.jpg', '/tmp/2.jpg']} onSkip={onSkip} onTimeout={vi.fn()} />)
     const skipButton = screen.getByRole('button', { name: /skip/i })
     fireEvent.click(skipButton)
     expect(onSkip).toHaveBeenCalledTimes(1)
@@ -33,7 +33,7 @@ describe('QueuedScreen', () => {
 
   it('auto-calls onTimeout after 10 seconds', () => {
     const onTimeout = vi.fn()
-    render(<QueuedScreen onSkip={vi.fn()} onTimeout={onTimeout} />)
+    render(<QueuedScreen photos={['/tmp/1.jpg', '/tmp/2.jpg']} onSkip={vi.fn()} onTimeout={onTimeout} />)
 
     expect(onTimeout).not.toHaveBeenCalled()
 
@@ -50,7 +50,7 @@ describe('QueuedScreen', () => {
 
   it('does not call onTimeout if unmounted before 10 seconds', () => {
     const onTimeout = vi.fn()
-    const { unmount } = render(<QueuedScreen onSkip={vi.fn()} onTimeout={onTimeout} />)
+    const { unmount } = render(<QueuedScreen photos={['/tmp/1.jpg', '/tmp/2.jpg']} onSkip={vi.fn()} onTimeout={onTimeout} />)
 
     act(() => {
       vi.advanceTimersByTime(5_000)

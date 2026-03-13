@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   PRINT_QUEUE: 'print:queue',
   PRINT_STATUS: 'print:status',
   PRINTER_DETECT: 'printer:detect',
+  TEMPLATE_GET: 'template:get',
 } as const
 
 // ── Camera Types ──
@@ -28,7 +29,7 @@ export interface CameraService {
   detectCamera(): Promise<CameraInfo | null>
   captureImage(outputPath: string): Promise<string>
   capturePreviewFrame(): Promise<Buffer>
-  startPreviewStream(callback: (frame: Buffer) => void): () => void
+  startPreviewStream(callback: (frame: Buffer) => void): () => Promise<void>
 }
 
 // ── Printer Types ──
@@ -74,14 +75,16 @@ export interface TemplateConfig {
   height: number
   dpi: number
   background: string
-  slots: [TemplateSlot, TemplateSlot, TemplateSlot, TemplateSlot]
+  overlay?: string
+  printEnabled?: boolean
+  slots: TemplateSlot[]
 }
 
 export interface CompositorService {
   loadTemplate(configPath: string): Promise<TemplateConfig>
   compositePhotos(
     templateConfig: TemplateConfig,
-    photoPaths: [string, string, string, string],
+    photoPaths: string[],
     outputPath: string
   ): Promise<string>
   resizeToFit(imagePath: string, width: number, height: number): Promise<Buffer>
@@ -123,10 +126,11 @@ export interface AppState {
   shotIndex: number
   sessionId: string | null
   photos: string[]
+  totalShots: number
 }
 
 export type AppAction =
-  | { type: 'start'; sessionId: string }
+  | { type: 'start'; sessionId: string; totalShots: number }
   | { type: 'captured'; photoPath: string }
   | { type: 'skip' }
   | { type: 'timeout' }
@@ -146,6 +150,9 @@ export interface ElectronAPI {
     detect(name?: string): Promise<PrinterInfo | null>
     queue(sessionId: string): Promise<void>
     onStatus(callback: (status: PrintJobStatus) => void): () => void
+  }
+  template: {
+    get(): Promise<TemplateConfig>
   }
 }
 

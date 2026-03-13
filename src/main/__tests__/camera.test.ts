@@ -1,5 +1,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { EventEmitter } from 'events'
 import type { CameraService, CameraInfo } from '@shared/types'
+
+// Mock electron before importing the module under test
+vi.mock('electron', () => ({ app: { isPackaged: false } }))
+
+// Mock electron-log
+vi.mock('electron-log/main', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
+
+// Mock fs (for findHdmiDevice)
+vi.mock('fs', () => ({
+  default: {
+    readdirSync: vi.fn().mockReturnValue([]),
+    existsSync: vi.fn().mockReturnValue(false),
+    readFileSync: vi.fn().mockReturnValue(''),
+  },
+  readdirSync: vi.fn().mockReturnValue([]),
+  existsSync: vi.fn().mockReturnValue(false),
+  readFileSync: vi.fn().mockReturnValue(''),
+}))
 
 // Mock child_process before importing the module under test
 vi.mock('child_process', () => ({
@@ -10,8 +31,7 @@ vi.mock('child_process', () => ({
 import { execFile, spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
 
-// Import the camera service factory/constructor — Team B decides the export shape.
-// We expect a default export or named `createCameraService` function.
+// Import the camera service factory
 import { createCameraService } from '../camera'
 
 const mockExecFile = vi.mocked(execFile)
@@ -32,6 +52,25 @@ const DETECT_OUTPUT_MULTIPLE = `Model                          Port
 Canon EOS M100                 usb:001,004
 Canon EOS R5                   usb:002,007
 `
+
+interface MockChildProcess {
+  stdout: EventEmitter
+  stderr: EventEmitter
+  stdin: { write: ReturnType<typeof vi.fn> }
+  on: ReturnType<typeof vi.fn>
+  kill: ReturnType<typeof vi.fn>
+}
+
+function createMockChildProcess(): MockChildProcess {
+  const proc: MockChildProcess = {
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter(),
+    stdin: { write: vi.fn() },
+    on: vi.fn(),
+    kill: vi.fn(),
+  }
+  return proc
+}
 
 describe('CameraService', () => {
   let camera: CameraService
@@ -142,14 +181,19 @@ describe('CameraService', () => {
     const outputPath = '/tmp/photobooth/session-abc/shot-1.jpg'
 
     it('captures an image and returns the file path', async () => {
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: string,
-          stderr: string
-        ) => void
-        cb(null, 'New file is in location /tmp/photobooth/session-abc/shot-1.jpg\n', '')
-        return undefined as unknown as ChildProcess
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
+
+      // When stdin.write is called with the capture command, emit a MSG_CAPTURE_OK response
+      mockProc.stdin.write.mockImplementation((data: string) => {
+        // Build binary response: [0x02][4-byte BE length][path]
+        const pathBuf = Buffer.from(outputPath)
+        const header = Buffer.alloc(5)
+        header[0] = 0x02 // MSG_CAPTURE_OK
+        header.writeUInt32BE(pathBuf.length, 1)
+        const response = Buffer.concat([header, pathBuf])
+        process.nextTick(() => mockProc.stdout.emit('data', response))
+        return true
       })
 
       const result = await camera.captureImage(outputPath)
@@ -157,52 +201,55 @@ describe('CameraService', () => {
       expect(result).toBe(outputPath)
     })
 
-    it('calls gphoto2 with --capture-image-and-download and correct filename', async () => {
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: string,
-          stderr: string
-        ) => void
-        cb(null, '', '')
-        return undefined as unknown as ChildProcess
+    it('sends capture command to helper stdin', async () => {
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
+
+      mockProc.stdin.write.mockImplementation((data: string) => {
+        const pathBuf = Buffer.from(outputPath)
+        const header = Buffer.alloc(5)
+        header[0] = 0x02
+        header.writeUInt32BE(pathBuf.length, 1)
+        const response = Buffer.concat([header, pathBuf])
+        process.nextTick(() => mockProc.stdout.emit('data', response))
+        return true
       })
 
       await camera.captureImage(outputPath)
 
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'gphoto2',
-        expect.arrayContaining([
-          '--capture-image-and-download',
-          `--filename=${outputPath}`,
-        ]),
-        expect.anything(),
-        expect.any(Function)
-      )
+      expect(mockProc.stdin.write).toHaveBeenCalledWith(`capture ${outputPath}\n`)
     })
 
     it('rejects when capture fails', async () => {
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: string,
-          stderr: string
-        ) => void
-        cb(new Error('Could not capture image'), '', 'ERROR: Could not capture.')
-        return undefined as unknown as ChildProcess
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
+
+      mockProc.stdin.write.mockImplementation(() => {
+        // Build binary response: [0x03][4-byte BE zero length]
+        const header = Buffer.alloc(5)
+        header[0] = 0x03 // MSG_CAPTURE_FAIL
+        header.writeUInt32BE(0, 1)
+        process.nextTick(() => mockProc.stdout.emit('data', header))
+        return true
       })
 
       await expect(camera.captureImage(outputPath)).rejects.toThrow()
     })
 
     it('rejects on capture timeout', async () => {
-      mockExecFile.mockImplementation(() => {
-        // Simulate a command that never completes — the service should enforce a timeout
-        return undefined as unknown as ChildProcess
-      })
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
 
-      // The service should reject with a timeout error if gphoto2 hangs
-      await expect(camera.captureImage(outputPath)).rejects.toThrow()
+      // stdin.write does nothing — no response, so it should timeout
+      mockProc.stdin.write.mockReturnValue(true)
+
+      vi.useFakeTimers()
+      const promise = camera.captureImage(outputPath)
+
+      vi.advanceTimersByTime(15000)
+      vi.useRealTimers()
+
+      await expect(promise).rejects.toThrow()
     })
   })
 
@@ -266,127 +313,109 @@ describe('CameraService', () => {
 
   describe('startPreviewStream()', () => {
     it('invokes callback with frame buffers', async () => {
-      const fakeFrame = Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
+
       const frameCallback = vi.fn()
 
-      // Mock capturePreviewFrame to return fake frames
-      // The stream internally calls capturePreviewFrame in a loop
-      let callCount = 0
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: Buffer,
-          stderr: string
-        ) => void
-        callCount++
-        cb(null, fakeFrame, '')
-        return undefined as unknown as ChildProcess
-      })
+      camera.startPreviewStream(frameCallback)
 
-      const stop = camera.startPreviewStream(frameCallback)
+      // Emit a MSG_PREVIEW frame: [0x01][4-byte BE length][JPEG data]
+      const fakeFrame = Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+      const header = Buffer.alloc(5)
+      header[0] = 0x01 // MSG_PREVIEW
+      header.writeUInt32BE(fakeFrame.length, 1)
+      const message = Buffer.concat([header, fakeFrame])
+      mockProc.stdout.emit('data', message)
 
-      // Give the loop time to run a few iterations
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      stop()
-
-      expect(frameCallback).toHaveBeenCalled()
+      expect(frameCallback).toHaveBeenCalledTimes(1)
       expect(Buffer.isBuffer(frameCallback.mock.calls[0][0])).toBe(true)
+      expect(frameCallback.mock.calls[0][0].length).toBe(fakeFrame.length)
     })
 
     it('returns a stop function that halts the stream', async () => {
-      const fakeFrame = Buffer.from([0xff, 0xd8])
-      const frameCallback = vi.fn()
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
 
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: Buffer,
-          stderr: string
-        ) => void
-        cb(null, fakeFrame, '')
-        return undefined as unknown as ChildProcess
-      })
+      const frameCallback = vi.fn()
 
       const stop = camera.startPreviewStream(frameCallback)
 
-      // Let some frames accumulate
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      // Emit one frame
+      const fakeFrame = Buffer.from([0xff, 0xd8])
+      const header = Buffer.alloc(5)
+      header[0] = 0x01
+      header.writeUInt32BE(fakeFrame.length, 1)
+      mockProc.stdout.emit('data', Buffer.concat([header, fakeFrame]))
 
       const countAtStop = frameCallback.mock.calls.length
-      stop()
+      expect(countAtStop).toBe(1)
 
-      // Wait and verify no more frames arrive
-      await new Promise((resolve) => setTimeout(resolve, 150))
-      const countAfterStop = frameCallback.mock.calls.length
-
-      expect(countAfterStop).toBe(countAtStop)
-    })
-
-    it('continues streaming even if a single frame capture fails', async () => {
-      const fakeFrame = Buffer.from([0xff, 0xd8])
-      const frameCallback = vi.fn()
-      let callCount = 0
-
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: Buffer,
-          stderr: string
-        ) => void
-        callCount++
-        if (callCount === 2) {
-          // Second call fails
-          cb(new Error('Temporary USB error'), Buffer.alloc(0), '')
-        } else {
-          cb(null, fakeFrame, '')
+      // Mock kill to emit close
+      mockProc.kill.mockImplementation(() => {
+        // Find the 'close' handler and call it
+        const closeCalls = mockProc.on.mock.calls.filter((c: [string, unknown]) => c[0] === 'close')
+        for (const call of closeCalls) {
+          ;(call[1] as (code: number | null) => void)(0)
         }
-        return undefined as unknown as ChildProcess
+        return true
       })
 
-      const stop = camera.startPreviewStream(frameCallback)
+      await stop()
 
-      await new Promise((resolve) => setTimeout(resolve, 300))
+      // Emit another frame after stop — should not be received
+      mockProc.stdout.emit('data', Buffer.concat([header, fakeFrame]))
 
-      stop()
+      expect(frameCallback.mock.calls.length).toBe(countAtStop)
+    })
 
-      // Should have received frames despite the error on call #2
-      expect(frameCallback).toHaveBeenCalled()
-      // The callback should only have been called with successful frames
-      for (const call of frameCallback.mock.calls) {
-        expect(Buffer.isBuffer(call[0])).toBe(true)
-        expect(call[0].length).toBeGreaterThan(0)
-      }
+    it('handles multiple preview frames in sequence', async () => {
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
+
+      const frameCallback = vi.fn()
+
+      camera.startPreviewStream(frameCallback)
+
+      // Emit two frames in one chunk
+      const fakeFrame = Buffer.from([0xff, 0xd8])
+      const header = Buffer.alloc(5)
+      header[0] = 0x01
+      header.writeUInt32BE(fakeFrame.length, 1)
+      const oneMsg = Buffer.concat([header, fakeFrame])
+      const twoMsgs = Buffer.concat([oneMsg, oneMsg])
+      mockProc.stdout.emit('data', twoMsgs)
+
+      expect(frameCallback).toHaveBeenCalledTimes(2)
     })
   })
 
   describe('error cases', () => {
     it('handles camera not found during capture', async () => {
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: string,
-          stderr: string
-        ) => void
-        const error = new Error('Could not detect any camera') as NodeJS.ErrnoException
-        error.code = 'ERR_CAMERA_NOT_FOUND'
-        cb(error, '', '*** Error: No camera found. ***')
-        return undefined as unknown as ChildProcess
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
+
+      mockProc.stdin.write.mockImplementation(() => {
+        const header = Buffer.alloc(5)
+        header[0] = 0x03 // MSG_CAPTURE_FAIL
+        header.writeUInt32BE(0, 1)
+        process.nextTick(() => mockProc.stdout.emit('data', header))
+        return true
       })
 
       await expect(camera.captureImage('/tmp/test.jpg')).rejects.toThrow()
     })
 
     it('handles USB disconnection during capture', async () => {
-      mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
-        const cb = (typeof _opts === 'function' ? _opts : callback) as (
-          error: Error | null,
-          stdout: string,
-          stderr: string
-        ) => void
-        const error = new Error('PTP I/O error') as NodeJS.ErrnoException
-        cb(error, '', '*** Error: I/O in progress ***')
-        return undefined as unknown as ChildProcess
+      const mockProc = createMockChildProcess()
+      mockSpawn.mockReturnValue(mockProc as unknown as ChildProcess)
+
+      mockProc.stdin.write.mockImplementation(() => {
+        const header = Buffer.alloc(5)
+        header[0] = 0x03
+        header.writeUInt32BE(0, 1)
+        process.nextTick(() => mockProc.stdout.emit('data', header))
+        return true
       })
 
       await expect(camera.captureImage('/tmp/test.jpg')).rejects.toThrow()

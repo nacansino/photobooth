@@ -1,12 +1,12 @@
 {
-  "width": 1800,
-  "height": 1200,
+  "width": 1051,
+  "height": 1405,
   "dpi": 300,
-  "background": "templates/default-bg.png",
+  "background": "frame.png",
+  "overlay": "overlay.png",
+  "printEnabled": true,
   "slots": [
-    { "x": 50, "y": 50, "width": 825, "height": 550 },
-    { "x": 925, "y": 50, "width": 825, "height": 550 },
-    { "x": 50, "y": 650, "width": 825, "height": 550 },
-    { "x": 925, "y": 650, "width": 825, "height": 550 }
+    { "x": 86, "y": 105, "width": 879, "height": 494 },
+    { "x": 86, "y": 624, "width": 879, "height": 494 }
   ]
 }

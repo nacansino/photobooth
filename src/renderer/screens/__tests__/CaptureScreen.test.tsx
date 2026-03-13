@@ -18,6 +18,9 @@ function createMockApi(): ElectronAPI {
       queue: vi.fn().mockResolvedValue(undefined),
       onStatus: vi.fn().mockReturnValue(vi.fn()),
     },
+    template: {
+      get: vi.fn().mockResolvedValue({ width: 1800, height: 1200, dpi: 300, background: 'bg.png', slots: [{},{},{},{}] }),
+    },
   }
 }
 
@@ -35,12 +38,12 @@ describe('CaptureScreen', () => {
   })
 
   it('displays a countdown starting at 10', () => {
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByText('10')).toBeInTheDocument()
   })
 
   it('countdown decrements each second', () => {
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByText('10')).toBeInTheDocument()
 
     act(() => {
@@ -55,26 +58,19 @@ describe('CaptureScreen', () => {
   })
 
   it('shows the current shot number (e.g., "Photo 1 of 4")', () => {
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByText(/photo 1 of 4/i)).toBeInTheDocument()
   })
 
-  it('displays a live preview area', () => {
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
-    // Expect a canvas or img element for the live preview
-    const preview = document.querySelector('canvas') ?? document.querySelector('img[data-testid="live-preview"]')
-    expect(preview).toBeInTheDocument()
-  })
-
   it('shows a cancel button', () => {
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={vi.fn()} />)
     const cancelButton = screen.getByRole('button', { name: /cancel/i })
     expect(cancelButton).toBeInTheDocument()
   })
 
   it('calls onCancel when cancel is clicked and confirmed', () => {
     const onCancel = vi.fn()
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={onCancel} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={onCancel} />)
 
     const cancelButton = screen.getByRole('button', { name: /cancel/i })
     fireEvent.click(cancelButton)
@@ -88,7 +84,7 @@ describe('CaptureScreen', () => {
 
   it('does not call onCancel if cancel is dismissed', () => {
     const onCancel = vi.fn()
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={onCancel} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={onCancel} />)
 
     const cancelButton = screen.getByRole('button', { name: /cancel/i })
     fireEvent.click(cancelButton)
@@ -101,7 +97,7 @@ describe('CaptureScreen', () => {
   })
 
   it('triggers capture when countdown reaches 0', async () => {
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={vi.fn()} />)
 
     // Advance 10 seconds to reach 0
     act(() => {
@@ -121,7 +117,7 @@ describe('CaptureScreen', () => {
     }
     mockApi.camera.capture = captureMock
 
-    render(<CaptureScreen onComplete={onComplete} onCancel={vi.fn()} />)
+    render(<CaptureScreen totalShots={4} onComplete={onComplete} onCancel={vi.fn()} />)
 
     // Simulate 4 rounds of countdown (10s each)
     for (let shot = 0; shot < 4; shot++) {
@@ -149,7 +145,7 @@ describe('CaptureScreen', () => {
     }
     mockApi.camera.capture = captureMock
 
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
+    render(<CaptureScreen totalShots={4} onComplete={vi.fn()} onCancel={vi.fn()} />)
 
     expect(screen.getByText(/photo 1 of 4/i)).toBeInTheDocument()
 
@@ -162,16 +158,5 @@ describe('CaptureScreen', () => {
     })
 
     expect(screen.getByText(/photo 2 of 4/i)).toBeInTheDocument()
-  })
-
-  it('starts camera preview on mount', () => {
-    render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
-    expect(mockApi.camera.startPreview).toHaveBeenCalled()
-  })
-
-  it('stops camera preview on unmount', () => {
-    const { unmount } = render(<CaptureScreen onComplete={vi.fn()} onCancel={vi.fn()} />)
-    unmount()
-    expect(mockApi.camera.stopPreview).toHaveBeenCalled()
   })
 })

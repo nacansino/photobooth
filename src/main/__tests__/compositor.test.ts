@@ -115,7 +115,7 @@ describe('loadTemplate', () => {
     await expect(loadTemplate(configPath)).rejects.toThrow()
   })
 
-  it('validates that template has exactly 4 slots', async () => {
+  it('validates that template has at least 1 slot', async () => {
     const configPath = path.join(tmpDir, 'bad.json')
     await fs.writeFile(
       configPath,
@@ -124,7 +124,7 @@ describe('loadTemplate', () => {
         height: 400,
         dpi: 300,
         background: 'bg.png',
-        slots: [{ x: 0, y: 0, width: 100, height: 100 }],
+        slots: [],
       })
     )
 

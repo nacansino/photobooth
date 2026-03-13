@@ -12,7 +12,7 @@ describe('appReducer', () => {
   })
 
   it('start action transitions from idle to capturing with shotIndex 0', () => {
-    const state = appReducer(initialState, { type: 'start', sessionId: 'session-abc' })
+    const state = appReducer(initialState, { type: 'start', sessionId: 'session-abc', totalShots: 4 })
     expect(state.screen).toBe('capturing')
     expect(state.shotIndex).toBe(0)
     expect(state.sessionId).toBe('session-abc')
@@ -25,6 +25,7 @@ describe('appReducer', () => {
       shotIndex: 0,
       sessionId: 'session-abc',
       photos: [],
+      totalShots: 4,
     }
     const state = appReducer(capturing, { type: 'captured', photoPath: '/tmp/shot-1.jpg' })
     expect(state.screen).toBe('capturing')
@@ -38,6 +39,7 @@ describe('appReducer', () => {
       shotIndex: 1,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg'],
+      totalShots: 4,
     }
     const state = appReducer(capturing, { type: 'captured', photoPath: '/tmp/shot-2.jpg' })
     expect(state.screen).toBe('capturing')
@@ -51,6 +53,7 @@ describe('appReducer', () => {
       shotIndex: 2,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg', '/tmp/shot-2.jpg'],
+      totalShots: 4,
     }
     const state = appReducer(capturing, { type: 'captured', photoPath: '/tmp/shot-3.jpg' })
     expect(state.screen).toBe('capturing')
@@ -64,6 +67,7 @@ describe('appReducer', () => {
       shotIndex: 3,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg', '/tmp/shot-2.jpg', '/tmp/shot-3.jpg'],
+      totalShots: 4,
     }
     const state = appReducer(capturing, { type: 'captured', photoPath: '/tmp/shot-4.jpg' })
     expect(state.screen).toBe('queued')
@@ -81,6 +85,7 @@ describe('appReducer', () => {
       shotIndex: 4,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg', '/tmp/shot-2.jpg', '/tmp/shot-3.jpg', '/tmp/shot-4.jpg'],
+      totalShots: 4,
     }
     const state = appReducer(queued, { type: 'skip' })
     expect(state.screen).toBe('idle')
@@ -95,6 +100,7 @@ describe('appReducer', () => {
       shotIndex: 4,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg', '/tmp/shot-2.jpg', '/tmp/shot-3.jpg', '/tmp/shot-4.jpg'],
+      totalShots: 4,
     }
     const state = appReducer(queued, { type: 'timeout' })
     expect(state.screen).toBe('idle')
@@ -109,6 +115,7 @@ describe('appReducer', () => {
       shotIndex: 2,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg', '/tmp/shot-2.jpg'],
+      totalShots: 4,
     }
     const state = appReducer(capturing, { type: 'cancel' })
     expect(state.screen).toBe('idle')
@@ -124,8 +131,9 @@ describe('appReducer', () => {
       shotIndex: 1,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg'],
+      totalShots: 4,
     }
-    const state = appReducer(capturing, { type: 'start', sessionId: 'session-new' })
+    const state = appReducer(capturing, { type: 'start', sessionId: 'session-new', totalShots: 4 })
     expect(state).toEqual(capturing)
   })
 
@@ -135,8 +143,9 @@ describe('appReducer', () => {
       shotIndex: 4,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg', '/tmp/shot-2.jpg', '/tmp/shot-3.jpg', '/tmp/shot-4.jpg'],
+      totalShots: 4,
     }
-    const state = appReducer(queued, { type: 'start', sessionId: 'session-new' })
+    const state = appReducer(queued, { type: 'start', sessionId: 'session-new', totalShots: 4 })
     expect(state).toEqual(queued)
   })
 
@@ -161,6 +170,7 @@ describe('appReducer', () => {
       shotIndex: 1,
       sessionId: 'session-abc',
       photos: ['/tmp/shot-1.jpg'],
+      totalShots: 4,
     }
     const state = appReducer(capturing, { type: 'timeout' })
     expect(state).toEqual(capturing)
@@ -170,7 +180,7 @@ describe('appReducer', () => {
     let state: AppState = initialState
 
     // Start session
-    state = appReducer(state, { type: 'start', sessionId: 'session-full' })
+    state = appReducer(state, { type: 'start', sessionId: 'session-full', totalShots: 4 })
     expect(state.screen).toBe('capturing')
 
     // Capture 4 shots

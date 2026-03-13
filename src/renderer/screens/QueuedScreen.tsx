@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react'
 
 export default function QueuedScreen({
+  photos,
   onSkip,
   onTimeout,
 }: {
+  photos: string[]
   onSkip: () => void
   onTimeout: () => void
 }) {
@@ -17,7 +19,16 @@ export default function QueuedScreen({
   }, [onTimeout])
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-black gap-8">
+    <div className="flex flex-col items-center justify-center h-full gap-6">
+      <div className="grid grid-cols-2 grid-rows-2 gap-2 w-[900px]">
+        {photos.map((photo, i) => (
+          <img
+            key={i}
+            src={`file://${photo}`}
+            className="w-full aspect-video object-cover rounded"
+          />
+        ))}
+      </div>
       <p className="text-2xl text-white text-center px-8">
         Your photo is queued for printing, please wait...
       </p>

@@ -9,10 +9,10 @@ function parsePrinterStatus(line: string): 'idle' | 'printing' | 'error' | 'offl
 }
 
 export function detectPrinter(name?: string): Promise<PrinterInfo | null> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     execFile('lpstat', ['-p'], (error, stdout) => {
       if (error) {
-        reject(error)
+        resolve(null)
         return
       }
 

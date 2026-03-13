@@ -18,6 +18,9 @@ const api: ElectronAPI = {
     },
     capture: () => ipcRenderer.invoke(IPC_CHANNELS.CAMERA_CAPTURE),
   },
+  template: {
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.TEMPLATE_GET),
+  },
   printer: {
     detect: (name?: string) => ipcRenderer.invoke(IPC_CHANNELS.PRINTER_DETECT, name),
     queue: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.PRINT_QUEUE, sessionId),
