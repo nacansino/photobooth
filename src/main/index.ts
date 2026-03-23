@@ -166,7 +166,7 @@ ipcMain.handle(IPC_CHANNELS.PRINT_QUEUE, async (_event, _sessionId: string) => {
       const printer = await detectPrinter()
       if (printer) {
         const job = await printImage(compositePath, printer.name, {
-          media: '89x119mm.Borderless',
+          media: 'om_89x-119mm-borderless_89x119mm',
           fitToPage: true,
         })
         log.info(`[print] Job queued: ${job.jobId}`)

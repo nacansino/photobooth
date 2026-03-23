@@ -4,7 +4,7 @@
   "dpi": 300,
   "background": "frame.png",
   "overlay": "overlay.png",
-  "printEnabled": false,
+  "printEnabled": true,
   "slots": [
     { "x": 86, "y": 105, "width": 879, "height": 494 },
     { "x": 86, "y": 624, "width": 879, "height": 494 }

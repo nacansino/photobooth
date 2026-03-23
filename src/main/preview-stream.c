@@ -78,12 +78,33 @@ static int send_preview_frame(Camera *camera, GPContext *context) {
     return 0;
 }
 
+static void trigger_autofocus(Camera *camera, GPContext *context) {
+    CameraWidget *widget = NULL, *child = NULL;
+    int ret;
+
+    ret = gp_camera_get_config(camera, &widget, context);
+    if (ret != GP_OK) return;
+
+    ret = gp_widget_get_child_by_name(widget, "autofocusdrive", &child);
+    if (ret == GP_OK) {
+        int one = 1;
+        gp_widget_set_value(child, &one);
+        gp_camera_set_config(camera, widget, context);
+        /* Give AF time to lock */
+        usleep(500000);
+    }
+    gp_widget_free(widget);
+}
+
 static void do_capture(Camera *camera, GPContext *context, const char *output_path) {
     CameraFile *file = NULL;
     CameraFilePath camera_path;
     int ret;
 
     fprintf(stderr, "preview-stream: capturing to %s\n", output_path);
+
+    /* Autofocus before capture */
+    trigger_autofocus(camera, context);
 
     ret = gp_camera_capture(camera, GP_CAPTURE_IMAGE, &camera_path, context);
     if (ret != GP_OK) {
