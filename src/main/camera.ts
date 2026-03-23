@@ -20,7 +20,8 @@ function findHdmiDevice(): string | null {
       const sysPath = `/sys/class/video4linux/${dev}/name`
       if (!fs.existsSync(sysPath)) continue
       const name = fs.readFileSync(sysPath, 'utf-8').trim().toLowerCase()
-      // Skip built-in webcams / IR cameras — match common capture card names
+      // Skip built-in webcams / IR cameras / Intel IPU — match common capture card names
+      if (name.includes('intel') || name.includes('ipu')) continue
       if (
         name.includes('capture') ||
         name.includes('guermok') ||
@@ -169,6 +170,11 @@ export function createCameraService(): CameraService {
     ffmpegProc.on('close', (code) => {
       if (code && code !== 0) {
         log.error(`[hdmi-preview] ffmpeg exited with code ${code}`)
+        // Fallback to USB preview if HDMI failed
+        if (previewMode === 'hdmi') {
+          log.info('[camera] HDMI failed, falling back to USB preview')
+          previewMode = 'usb'
+        }
       }
       ffmpegProc = null
     })
