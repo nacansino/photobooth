@@ -135,6 +135,13 @@ All sessions are saved to disk:
         └── composite.jpg
 ```
 
+## Future Work
+
+- **Print queue monitoring**: Poll IPP `printer-state-reasons` to detect paper-out (`input-tray-missing`) and show on-screen alerts
+- **SMS notifications**: Twilio integration to text the operator when the printer needs attention
+- **Print counter**: Track prints per paper/ink set (108 sheets for KP-108IN) with persistent counter and low-paper warnings
+- **Error recovery UI**: Surface printer errors to the kiosk screen with actionable messages instead of silently skipping
+
 ## Working with an AI agent
 
 Point your agent to [`CLAUDE.md`](CLAUDE.md) to get oriented.
