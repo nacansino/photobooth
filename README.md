@@ -142,6 +142,10 @@ All sessions are saved to disk:
 - **Print counter**: Track prints per paper/ink set (108 sheets for KP-108IN) with persistent counter and low-paper warnings
 - **Error recovery UI**: Surface printer errors to the kiosk screen with actionable messages instead of silently skipping
 
+## Known Issues / To Check
+
+- **Inconsistent shot counts**: Post-event audit found sessions with 0 or 3 shots instead of the expected 2. Session `4cjgCRP-` (2026-04-04) has 3 shots; sessions `nAewkjj-` and `qFnnLw2S` (2026-03-23) have 0 shots (composite only). Investigate whether a session can end mid-capture, and add a guard to ensure the number of captured shots always matches the template slot count before compositing.
+
 ## Working with an AI agent
 
 Point your agent to [`CLAUDE.md`](CLAUDE.md) to get oriented.
